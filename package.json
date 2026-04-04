@@ -1,0 +1,15 @@
+{
+  "name": "urbrain-desktop",
+  "version": "1.0.0",
+  "description": "Urbrain AI Platform — Desktop App (Tauri)",
+  "private": true,
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "tauri": "tauri"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0"
+  }
+}

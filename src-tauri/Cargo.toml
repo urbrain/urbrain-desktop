@@ -1,0 +1,27 @@
+[package]
+name = "urbrain-desktop"
+version = "1.0.0"
+description = "Urbrain AI Platform Desktop App"
+authors = ["Urbrain Team"]
+license = "MIT"
+repository = "https://github.com/urbrain-ai/urbrain"
+edition = "2021"
+rust-version = "1.77.2"
+
+[lib]
+name = "urbrain_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-shell = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-deep-link = "2"
+tauri-plugin-store = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
