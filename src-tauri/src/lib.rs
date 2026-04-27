@@ -17,16 +17,32 @@ fn toggle_window<R: Runtime>(app: &tauri::AppHandle<R>) {
     }
 }
 
+/// Navigate the main window to a path and bring it to front
+fn navigate_to<R: Runtime>(app: &tauri::AppHandle<R>, path: &str) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.set_focus();
+        let script = format!("window.location.href='{path}'");
+        let _ = window.eval(&script);
+    }
+}
+
 /// Build the system-tray menu
 fn build_tray_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<R>> {
-    let show = MenuItem::with_id(app, "show", "Show Hoori", true, None::<&str>)?;
-    let separator = tauri::menu::PredefinedMenuItem::separator(app)?;
-    let approvals = MenuItem::with_id(app, "approvals", "Approval Inbox", true, None::<&str>)?;
-    let dashboard = MenuItem::with_id(app, "dashboard", "Dashboard", true, None::<&str>)?;
-    let separator2 = tauri::menu::PredefinedMenuItem::separator(app)?;
-    let quit = MenuItem::with_id(app, "quit", "Quit Hoori", true, None::<&str>)?;
+    let show      = MenuItem::with_id(app, "show",      "Show Urbrain",     true, None::<&str>)?;
+    let sep1      = tauri::menu::PredefinedMenuItem::separator(app)?;
+    let dashboard = MenuItem::with_id(app, "dashboard", "Dashboard",         true, None::<&str>)?;
+    let ops       = MenuItem::with_id(app, "ops",       "AI Ops Center",     true, None::<&str>)?;
+    let canvas    = MenuItem::with_id(app, "canvas",    "Workflow Canvas",   true, None::<&str>)?;
+    let approvals = MenuItem::with_id(app, "approvals", "Approval Inbox",    true, None::<&str>)?;
+    let sep2      = tauri::menu::PredefinedMenuItem::separator(app)?;
+    let quit      = MenuItem::with_id(app, "quit",      "Quit Urbrain",      true, None::<&str>)?;
 
-    Menu::with_items(app, &[&show, &separator, &approvals, &dashboard, &separator2, &quit])
+    Menu::with_items(app, &[
+        &show, &sep1,
+        &dashboard, &ops, &canvas, &approvals,
+        &sep2, &quit,
+    ])
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -56,7 +72,7 @@ pub fn run() {
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .menu(&menu)
-                .tooltip("Hoori AI Platform")
+                .tooltip("Urbrain AI Platform")
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "show" => {
                         if let Some(window) = app.get_webview_window("main") {
@@ -64,23 +80,11 @@ pub fn run() {
                             let _ = window.set_focus();
                         }
                     }
-                    "approvals" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                            let _ = window.eval("window.location.href='/autopilot/approvals'");
-                        }
-                    }
-                    "dashboard" => {
-                        if let Some(window) = app.get_webview_window("main") {
-                            let _ = window.show();
-                            let _ = window.set_focus();
-                            let _ = window.eval("window.location.href='/'");
-                        }
-                    }
-                    "quit" => {
-                        app.exit(0);
-                    }
+                    "dashboard" => navigate_to(app, "/"),
+                    "ops"       => navigate_to(app, "/"),          // Dashboard is the Ops Center
+                    "canvas"    => navigate_to(app, "/canvas"),
+                    "approvals" => navigate_to(app, "/autopilot/approvals"),
+                    "quit"      => app.exit(0),
                     _ => {}
                 })
                 .on_tray_icon_event(move |tray, event| {
@@ -109,10 +113,10 @@ pub fn run() {
             get_platform,
         ])
         .run(tauri::generate_context!())
-        .expect("error while running Hoori desktop app");
+        .expect("error while running Urbrain desktop app");
 }
 
-/// Send a native desktop notification (callable from the web frontend)
+/// Send a native desktop notification (callable from the web frontend via Tauri invoke)
 #[tauri::command]
 fn send_desktop_notification(
     app: tauri::AppHandle,
@@ -127,7 +131,7 @@ fn send_desktop_notification(
         .map_err(|e| e.to_string())
 }
 
-/// Return the current platform string
+/// Return the current platform string (used by the frontend to detect desktop mode)
 #[tauri::command]
 fn get_platform() -> &'static str {
     std::env::consts::OS
