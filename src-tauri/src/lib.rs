@@ -81,7 +81,7 @@ pub fn run() {
                         }
                     }
                     "dashboard" => navigate_to(app, "/"),
-                    "ops"       => navigate_to(app, "/"),          // Dashboard is the Ops Center
+                    "ops"       => navigate_to(app, "/operations"),
                     "canvas"    => navigate_to(app, "/canvas"),
                     "approvals" => navigate_to(app, "/autopilot/approvals"),
                     "quit"      => app.exit(0),
