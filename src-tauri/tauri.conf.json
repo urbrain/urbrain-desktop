@@ -7,7 +7,7 @@
     "beforeDevCommand": "cd ../urbrain-client && npm run dev",
     "devUrl": "http://localhost:5173",
     "beforeBuildCommand": "cd ../urbrain-client && npm run build",
-    "frontendDist": "../urbrain-client/dist"
+    "frontendDist": "../../urbrain-client/dist"
   },
   "app": {
     "windows": [
