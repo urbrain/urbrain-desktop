@@ -1,0 +1,128 @@
+# © 2025-2026 GITC — Global Innovation Technology Company (GITC)
+# Builds signed Urbrain desktop installers (macOS / Windows / Linux) with Tauri
+# and publishes them to this repo's Releases. The website's Download page reads
+# the latest release from here.
+#
+# Layout note: the Tauri config (src-tauri/tauri.conf.json) references the web
+# frontend as a SIBLING folder ("../urbrain-client"), via:
+#   beforeBuildCommand: "cd ../urbrain-client && npm run build"
+#   frontendDist:       "../urbrain-client/dist"
+# So CI checks out BOTH repos side-by-side under the workspace root:
+#   $GITHUB_WORKSPACE/urbrain-desktop   (this repo)
+#   $GITHUB_WORKSPACE/urbrain-client    (private frontend, needs a PAT)
+#
+# Required secret:
+#   CLIENT_CHECKOUT_TOKEN — a fine-grained PAT with read access to
+#   projectminovative/urbrain-client (Contents: Read). Used only to check that
+#   private repo out; the release upload itself uses the built-in GITHUB_TOKEN.
+#
+# Optional secrets (code signing / auto-update — safe to leave unset for now):
+#   APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
+#   APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID   (macOS notarization)
+#   TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD (updater)
+
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build (e.g. v1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
+            tauri-args: "--target universal-apple-darwin"
+          - platform: ubuntu-22.04
+            rust-targets: ""
+            tauri-args: ""
+          - platform: windows-latest
+            rust-targets: ""
+            tauri-args: ""
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Check out desktop app (this repo)
+        uses: actions/checkout@v4
+        with:
+          path: urbrain-desktop
+
+      - name: Check out web frontend (private, sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: projectminovative/urbrain-client
+          token: ${{ secrets.CLIENT_CHECKOUT_TOKEN }}
+          path: urbrain-client
+
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            build-essential \
+            libssl-dev \
+            libgtk-3-dev
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
+
+      - name: Cache Rust build
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: urbrain-desktop/src-tauri -> target
+
+      - name: Install web frontend dependencies
+        working-directory: urbrain-client
+        run: npm ci || npm install
+
+      - name: Install desktop app dependencies
+        working-directory: urbrain-desktop
+        run: npm ci || npm install
+
+      - name: Build and publish with Tauri
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # macOS signing / notarization (optional — no-op if unset)
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Tauri updater signing (optional)
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: urbrain-desktop
+          tagName: ${{ github.event.inputs.tag || github.ref_name }}
+          releaseName: "Urbrain __VERSION__"
+          releaseBody: "See the assets below to download and install Urbrain for your platform."
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.tauri-args }}
