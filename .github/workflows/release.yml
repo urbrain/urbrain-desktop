@@ -51,7 +51,7 @@ jobs:
             tauri-args: ""
           - platform: windows-latest
             rust-targets: ""
-            tauri-args: ""
+            tauri-args: "--config sign-config.json"
 
     runs-on: ${{ matrix.platform }}
 
@@ -103,6 +103,34 @@ jobs:
       - name: Install desktop app dependencies
         working-directory: urbrain-desktop
         run: npm ci || npm install
+
+      # Writes urbrain-desktop/sign-config.json, which the Windows build merges via
+      # `--config sign-config.json`. If WINDOWS_CERTIFICATE isn't set, it writes an
+      # empty {} (a no-op) so unsigned Windows builds still succeed.
+      - name: Prepare Windows code signing
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        working-directory: urbrain-desktop
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_TIMESTAMP_URL: ${{ secrets.WINDOWS_TIMESTAMP_URL }}
+        run: |
+          # Default: no-op config so an unsigned build still works.
+          Set-Content -Path sign-config.json -Value '{}' -Encoding ascii
+          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE)) {
+            Write-Host "WINDOWS_CERTIFICATE not set - Windows build will be UNSIGNED."
+            exit 0
+          }
+          $pfxPath = Join-Path $env:RUNNER_TEMP "urbrain-code-sign.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $securePwd = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $cert = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePwd
+          Remove-Item $pfxPath -Force
+          $ts = if ([string]::IsNullOrWhiteSpace($env:WINDOWS_TIMESTAMP_URL)) { "http://timestamp.digicert.com" } else { $env:WINDOWS_TIMESTAMP_URL }
+          $config = @{ bundle = @{ windows = @{ certificateThumbprint = $cert.Thumbprint; digestAlgorithm = "sha256"; timestampUrl = $ts } } }
+          $config | ConvertTo-Json -Depth 6 | Set-Content -Path sign-config.json -Encoding ascii
+          Write-Host "Windows signing configured (thumbprint $($cert.Thumbprint), timestamp $ts)."
 
       - name: Build and publish with Tauri
         uses: tauri-apps/tauri-action@v0
