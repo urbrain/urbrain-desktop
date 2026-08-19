@@ -104,33 +104,49 @@ jobs:
         working-directory: urbrain-desktop
         run: npm ci || npm install
 
-      # Writes urbrain-desktop/sign-config.json, which the Windows build merges via
-      # `--config sign-config.json`. If WINDOWS_CERTIFICATE isn't set, it writes an
-      # empty {} (a no-op) so unsigned Windows builds still succeed.
+      # Writes urbrain-desktop/sign-config.json, merged by the Windows build via
+      # `--config sign-config.json`. Picks the signing method from whichever secrets
+      # are set — Azure Trusted Signing (preferred: instant SmartScreen trust) or a
+      # .pfx certificate. With neither, it writes {} so unsigned builds still succeed.
       - name: Prepare Windows code signing
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         working-directory: urbrain-desktop
         env:
+          # Option A — Azure Trusted Signing (recommended)
+          AZURE_SIGNING_ENDPOINT: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          AZURE_SIGNING_ACCOUNT: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          AZURE_SIGNING_PROFILE: ${{ secrets.AZURE_SIGNING_PROFILE }}
+          # Option B — standard .pfx code signing certificate
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
           WINDOWS_TIMESTAMP_URL: ${{ secrets.WINDOWS_TIMESTAMP_URL }}
         run: |
           # Default: no-op config so an unsigned build still works.
           Set-Content -Path sign-config.json -Value '{}' -Encoding ascii
-          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE)) {
-            Write-Host "WINDOWS_CERTIFICATE not set - Windows build will be UNSIGNED."
-            exit 0
+          if (-not [string]::IsNullOrWhiteSpace($env:AZURE_SIGNING_ENDPOINT)) {
+            Write-Host "Configuring Azure Trusted Signing..."
+            cargo install trusted-signing-cli --locked
+            $cmd = "trusted-signing-cli -e $($env:AZURE_SIGNING_ENDPOINT) -a $($env:AZURE_SIGNING_ACCOUNT) -c $($env:AZURE_SIGNING_PROFILE) %1"
+            $config = @{ bundle = @{ windows = @{ signCommand = $cmd } } }
+            $config | ConvertTo-Json -Depth 6 | Set-Content -Path sign-config.json -Encoding ascii
+            Write-Host "Azure Trusted Signing configured."
           }
-          $pfxPath = Join-Path $env:RUNNER_TEMP "urbrain-code-sign.pfx"
-          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
-          $securePwd = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
-          $cert = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePwd
-          Remove-Item $pfxPath -Force
-          $ts = if ([string]::IsNullOrWhiteSpace($env:WINDOWS_TIMESTAMP_URL)) { "http://timestamp.digicert.com" } else { $env:WINDOWS_TIMESTAMP_URL }
-          $config = @{ bundle = @{ windows = @{ certificateThumbprint = $cert.Thumbprint; digestAlgorithm = "sha256"; timestampUrl = $ts } } }
-          $config | ConvertTo-Json -Depth 6 | Set-Content -Path sign-config.json -Encoding ascii
-          Write-Host "Windows signing configured (thumbprint $($cert.Thumbprint), timestamp $ts)."
+          elseif (-not [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE)) {
+            Write-Host "Configuring .pfx certificate signing..."
+            $pfxPath = Join-Path $env:RUNNER_TEMP "urbrain-code-sign.pfx"
+            [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+            $securePwd = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+            $cert = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePwd
+            Remove-Item $pfxPath -Force
+            $ts = if ([string]::IsNullOrWhiteSpace($env:WINDOWS_TIMESTAMP_URL)) { "http://timestamp.digicert.com" } else { $env:WINDOWS_TIMESTAMP_URL }
+            $config = @{ bundle = @{ windows = @{ certificateThumbprint = $cert.Thumbprint; digestAlgorithm = "sha256"; timestampUrl = $ts } } }
+            $config | ConvertTo-Json -Depth 6 | Set-Content -Path sign-config.json -Encoding ascii
+            Write-Host "Certificate signing configured (thumbprint $($cert.Thumbprint))."
+          }
+          else {
+            Write-Host "No Windows signing secrets set - Windows build will be UNSIGNED."
+          }
 
       - name: Build and publish with Tauri
         uses: tauri-apps/tauri-action@v0
@@ -143,6 +159,10 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Azure Trusted Signing auth — used by the Windows signCommand during the build
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
         with:
           projectPath: urbrain-desktop
           tagName: ${{ github.event.inputs.tag || github.ref_name }}
