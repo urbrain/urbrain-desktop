@@ -194,3 +194,65 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.tauri-args }}
+
+  # ── Windows signing via SignPath Foundation (free OSS signing) ────────────────
+  # Signs the Windows installers as a post-build cloud step and replaces the
+  # unsigned assets on the (draft) release in place. Runs ONLY when SignPath is
+  # configured — i.e. the SIGNPATH_ORGANIZATION_ID repository *variable* is set —
+  # so it stays dormant until you finish SignPath setup. macOS/Linux are unaffected.
+  #
+  # Required repo *variables* (Settings → Secrets and variables → Actions → Variables):
+  #   SIGNPATH_ORGANIZATION_ID, SIGNPATH_PROJECT_SLUG,
+  #   SIGNPATH_SIGNING_POLICY_SLUG, SIGNPATH_ARTIFACT_CONFIG_SLUG
+  # Required repo *secret*:
+  #   SIGNPATH_API_TOKEN
+  sign-windows:
+    name: Sign Windows installers (SignPath)
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ vars.SIGNPATH_ORGANIZATION_ID != '' }}
+    permissions:
+      contents: write
+    env:
+      TAG: ${{ github.event.inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Download unsigned Windows installers from the draft release
+        run: |
+          mkdir -p unsigned
+          gh release download "$TAG" --repo "${{ github.repository }}" \
+            --pattern "*.msi" --pattern "*.exe" --dir unsigned
+          echo "Downloaded:"; ls -la unsigned
+
+      - name: Package installers for SignPath
+        run: (cd unsigned && zip -r ../windows-installers.zip .)
+
+      - name: Upload artifact for SignPath
+        id: upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installers-unsigned
+          path: windows-installers.zip
+          if-no-files-found: error
+
+      - name: Submit signing request to SignPath
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIG_SLUG }}
+          github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Replace release assets with signed installers
+        run: |
+          # SignPath returns the signed artifact mirroring what we submitted.
+          for z in signed/*.zip; do [ -f "$z" ] && unzip -o "$z" -d signed/extracted; done
+          find signed -type f \( -iname "*.msi" -o -iname "*.exe" \) -print0 |
+            while IFS= read -r -d '' f; do
+              echo "Uploading signed $(basename "$f")"
+              gh release upload "$TAG" "$f" --repo "${{ github.repository }}" --clobber
+            done
