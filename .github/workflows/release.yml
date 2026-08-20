@@ -113,18 +113,36 @@ jobs:
         shell: pwsh
         working-directory: urbrain-desktop
         env:
-          # Option A — Azure Trusted Signing (recommended)
+          # Option A — SSL.com eSigner (cloud EV; instant SmartScreen trust)
+          ESIGNER_USERNAME: ${{ secrets.ESIGNER_USERNAME }}
+          ESIGNER_CODESIGNTOOL_URL: ${{ secrets.ESIGNER_CODESIGNTOOL_URL }}
+          # Option B — Azure Trusted Signing
           AZURE_SIGNING_ENDPOINT: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
           AZURE_SIGNING_ACCOUNT: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
           AZURE_SIGNING_PROFILE: ${{ secrets.AZURE_SIGNING_PROFILE }}
-          # Option B — standard .pfx code signing certificate
+          # Option C — standard .pfx code signing certificate
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
           WINDOWS_TIMESTAMP_URL: ${{ secrets.WINDOWS_TIMESTAMP_URL }}
         run: |
           # Default: no-op config so an unsigned build still works.
           Set-Content -Path sign-config.json -Value '{}' -Encoding ascii
-          if (-not [string]::IsNullOrWhiteSpace($env:AZURE_SIGNING_ENDPOINT)) {
+          if (-not [string]::IsNullOrWhiteSpace($env:ESIGNER_USERNAME)) {
+            Write-Host "Configuring SSL.com eSigner (CodeSignTool)..."
+            $url = if ([string]::IsNullOrWhiteSpace($env:ESIGNER_CODESIGNTOOL_URL)) { "https://www.ssl.com/download/codesigntool-for-windows/" } else { $env:ESIGNER_CODESIGNTOOL_URL }
+            $zip = Join-Path $env:RUNNER_TEMP "codesigntool.zip"
+            $dst = Join-Path $env:RUNNER_TEMP "codesigntool"
+            Invoke-WebRequest -Uri $url -OutFile $zip -UseBasicParsing
+            Expand-Archive -Path $zip -DestinationPath $dst -Force
+            $bat = (Get-ChildItem -Path $dst -Recurse -Filter "CodeSignTool.bat" | Select-Object -First 1).FullName
+            if ([string]::IsNullOrWhiteSpace($bat)) { throw "CodeSignTool.bat not found after extracting $url - set ESIGNER_CODESIGNTOOL_URL to the current Windows zip." }
+            "CODESIGNTOOL_BAT=$bat" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
+            $wrapper = Join-Path $PWD "scripts\esigner-sign.ps1"
+            $config = @{ bundle = @{ windows = @{ signCommand = @{ cmd = "powershell"; args = @("-NoProfile", "-ExecutionPolicy", "Bypass", "-File", $wrapper, "%1") } } } }
+            $config | ConvertTo-Json -Depth 8 | Set-Content -Path sign-config.json -Encoding ascii
+            Write-Host "SSL.com eSigner configured (CodeSignTool at $bat)."
+          }
+          elseif (-not [string]::IsNullOrWhiteSpace($env:AZURE_SIGNING_ENDPOINT)) {
             Write-Host "Configuring Azure Trusted Signing..."
             cargo install trusted-signing-cli --locked
             $cmd = "trusted-signing-cli -e $($env:AZURE_SIGNING_ENDPOINT) -a $($env:AZURE_SIGNING_ACCOUNT) -c $($env:AZURE_SIGNING_PROFILE) %1"
@@ -163,6 +181,11 @@ jobs:
           AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
           AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          # SSL.com eSigner auth — used by the Windows signCommand during the build
+          ESIGNER_USERNAME: ${{ secrets.ESIGNER_USERNAME }}
+          ESIGNER_PASSWORD: ${{ secrets.ESIGNER_PASSWORD }}
+          ESIGNER_TOTP_SECRET: ${{ secrets.ESIGNER_TOTP_SECRET }}
+          ESIGNER_CREDENTIAL_ID: ${{ secrets.ESIGNER_CREDENTIAL_ID }}
         with:
           projectPath: urbrain-desktop
           tagName: ${{ github.event.inputs.tag || github.ref_name }}
