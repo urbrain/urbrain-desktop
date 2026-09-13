@@ -1,6 +1,6 @@
 [package]
 name = "urbrain-desktop"
-version = "1.0.0"
+version = "1.0.1"
 description = "Urbrain AI Platform Desktop App"
 authors = ["Urbrain Team"]
 license = "MIT"
