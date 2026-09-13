@@ -68,6 +68,13 @@ jobs:
           token: ${{ secrets.CLIENT_CHECKOUT_TOKEN }}
           path: urbrain-client
 
+      - name: Check out business dashboard (private, sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: projectminovative/urbrain-dashboard
+          token: ${{ secrets.CLIENT_CHECKOUT_TOKEN }}
+          path: urbrain-dashboard
+
       - name: Install Linux build dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -98,6 +105,10 @@ jobs:
 
       - name: Install web frontend dependencies
         working-directory: urbrain-client
+        run: npm ci || npm install
+
+      - name: Install business dashboard dependencies
+        working-directory: urbrain-dashboard
         run: npm ci || npm install
 
       - name: Install desktop app dependencies

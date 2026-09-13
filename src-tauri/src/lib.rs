@@ -36,12 +36,18 @@ fn build_tray_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<
     let canvas    = MenuItem::with_id(app, "canvas",    "Workflow Canvas",   true, None::<&str>)?;
     let approvals = MenuItem::with_id(app, "approvals", "Approval Inbox",    true, None::<&str>)?;
     let sep2      = tauri::menu::PredefinedMenuItem::separator(app)?;
+    // Switch the window between the two bundled front-ends: the consumer app at
+    // "/" and the business dashboard mounted at "/dashboard/".
+    let consumer  = MenuItem::with_id(app, "consumer", "Consumer App",       true, None::<&str>)?;
+    let business  = MenuItem::with_id(app, "business", "Business Dashboard",  true, None::<&str>)?;
+    let sep3      = tauri::menu::PredefinedMenuItem::separator(app)?;
     let quit      = MenuItem::with_id(app, "quit",      "Quit Urbrain",      true, None::<&str>)?;
 
     Menu::with_items(app, &[
         &show, &sep1,
         &dashboard, &ops, &canvas, &approvals,
-        &sep2, &quit,
+        &sep2, &consumer, &business,
+        &sep3, &quit,
     ])
 }
 
@@ -84,6 +90,8 @@ pub fn run() {
                     "ops"       => navigate_to(app, "/operations"),
                     "canvas"    => navigate_to(app, "/canvas"),
                     "approvals" => navigate_to(app, "/autopilot/approvals"),
+                    "consumer"  => navigate_to(app, "/"),
+                    "business"  => navigate_to(app, "/dashboard/"),
                     "quit"      => app.exit(0),
                     _ => {}
                 })
