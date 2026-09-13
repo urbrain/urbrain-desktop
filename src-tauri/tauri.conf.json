@@ -1,12 +1,12 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Urbrain",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "identifier": "ai.urbrain.desktop",
   "build": {
     "beforeDevCommand": "cd ../urbrain-client && npm run dev",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "cd ../urbrain-client && npm run build",
+    "beforeBuildCommand": "sh scripts/build-frontends.sh",
     "frontendDist": "../../urbrain-client/dist"
   },
   "app": {
