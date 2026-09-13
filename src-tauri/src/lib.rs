@@ -91,7 +91,11 @@ pub fn run() {
                     "canvas"    => navigate_to(app, "/canvas"),
                     "approvals" => navigate_to(app, "/autopilot/approvals"),
                     "consumer"  => navigate_to(app, "/"),
-                    "business"  => navigate_to(app, "/dashboard/"),
+                    // Load the dashboard's exact index file. Tauri's asset protocol
+                    // only falls back to the ROOT index.html, so navigating to the
+                    // bare "/dashboard/" path would serve the consumer app; the
+                    // explicit file is served directly, then hash routing takes over.
+                    "business"  => navigate_to(app, "/dashboard/index.html"),
                     "quit"      => app.exit(0),
                     _ => {}
                 })
