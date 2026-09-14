@@ -25,4 +25,7 @@ echo "==> Combining: urbrain-client/dist/dashboard <- urbrain-dashboard/dist ...
 rm -rf ../urbrain-client/dist/dashboard
 cp -R ../urbrain-dashboard/dist ../urbrain-client/dist/dashboard
 
+echo "==> Installing shell.html (hosts both front-ends in iframes for instant switching) ..."
+cp scripts/shell.html ../urbrain-client/dist/shell.html
+
 echo "==> Done. Combined frontendDist ready at ../urbrain-client/dist"
