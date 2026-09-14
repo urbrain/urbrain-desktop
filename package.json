@@ -1,6 +1,6 @@
 {
   "name": "urbrain-desktop",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "Urbrain AI Platform — Desktop App (Tauri)",
   "private": true,
   "scripts": {
