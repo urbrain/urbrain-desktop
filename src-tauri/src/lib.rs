@@ -5,22 +5,6 @@ use tauri::{
 };
 use tauri_plugin_notification::NotificationExt;
 
-/// Injected into every page the desktop app loads: a small floating pill that lets
-/// the user switch between the consumer app ("/") and the business dashboard
-/// ("/dashboard/index.html"), complementing the tray items. Guards against
-/// duplicates and highlights whichever side is active.
-const SWITCHER_JS: &str = r#"(function(){try{
-  if(document.getElementById('__urbrain_switch'))return;
-  var onDash=location.pathname.indexOf('/dashboard')===0;
-  var bar=document.createElement('div');
-  bar.id='__urbrain_switch';
-  bar.style.cssText='position:fixed;bottom:16px;right:16px;z-index:2147483647;display:flex;gap:2px;background:rgba(17,17,24,.92);border:1px solid rgba(255,255,255,.14);border-radius:9999px;padding:3px;box-shadow:0 6px 24px rgba(0,0,0,.35);font-family:system-ui,-apple-system,sans-serif';
-  function mk(label,active,href){var b=document.createElement('button');b.textContent=label;b.style.cssText='appearance:none;border:0;outline:0;border-radius:9999px;padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer;color:'+(active?'#fff':'#9aa1ad')+';background:'+(active?'linear-gradient(135deg,#f97316,#a855f7)':'transparent');b.onclick=function(){if(!active)location.href=href;};return b;}
-  bar.appendChild(mk('Consumer',!onDash,'/'));
-  bar.appendChild(mk('Business',onDash,'/dashboard/index.html'));
-  (document.body||document.documentElement).appendChild(bar);
-}catch(e){}})();"#;
-
 /// Show or hide the main window
 fn toggle_window<R: Runtime>(app: &tauri::AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
@@ -38,7 +22,9 @@ fn navigate_to<R: Runtime>(app: &tauri::AppHandle<R>, path: &str) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.set_focus();
-        let script = format!("window.location.href='{path}'");
+        // The window hosts a shell page (shell.html) with both front-ends in
+        // iframes; ask it to reveal/route the right one — no reload, instant switch.
+        let script = format!("window.__urbrainNavigate && window.__urbrainNavigate('{path}')");
         let _ = window.eval(&script);
     }
 }
@@ -85,12 +71,6 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_store::Builder::new().build())
-        // Inject the floating Consumer/Business switcher into every page load.
-        .on_page_load(|webview, payload| {
-            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
-                let _ = webview.eval(SWITCHER_JS);
-            }
-        })
         .setup(|app| {
             let handle = app.handle().clone();
 
