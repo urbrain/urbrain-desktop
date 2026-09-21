@@ -5,6 +5,27 @@ use tauri::{
 };
 use tauri_plugin_notification::NotificationExt;
 
+/// The two live front-ends the desktop app hosts. They're loaded TOP-LEVEL at their
+/// own *.urbrain.ai origins (not bundled/iframed) so their SameSite cookie auth works
+/// exactly like the browser — same site as api.urbrain.ai.
+const CONSUMER_URL: &str = "https://client.urbrain.ai";
+const BUSINESS_URL: &str = "https://business.urbrain.ai";
+
+/// Injected into every loaded page: a floating pill to switch between the consumer
+/// app and the business dashboard. Highlights the active side (by hostname) and does
+/// a top-level navigation on click (cookies persist across *.urbrain.ai — no re-login).
+const SWITCHER_JS: &str = r#"(function(){try{
+  if(document.getElementById('__urbrain_switch'))return;
+  var onBiz=location.hostname.indexOf('business')===0;
+  var bar=document.createElement('div');
+  bar.id='__urbrain_switch';
+  bar.style.cssText='position:fixed;bottom:16px;right:16px;z-index:2147483647;display:flex;gap:2px;background:rgba(17,17,24,.92);border:1px solid rgba(255,255,255,.14);border-radius:9999px;padding:3px;box-shadow:0 6px 24px rgba(0,0,0,.35);font-family:system-ui,-apple-system,sans-serif';
+  function mk(label,active,url){var b=document.createElement('button');b.textContent=label;b.style.cssText='appearance:none;border:0;outline:0;border-radius:9999px;padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer;color:'+(active?'#fff':'#9aa1ad')+';background:'+(active?'linear-gradient(135deg,#f97316,#a855f7)':'transparent');b.onclick=function(){if(!active)location.href=url;};return b;}
+  bar.appendChild(mk('Consumer',!onBiz,'https://client.urbrain.ai/'));
+  bar.appendChild(mk('Business',onBiz,'https://business.urbrain.ai/'));
+  (document.body||document.documentElement).appendChild(bar);
+}catch(e){}})();"#;
+
 /// Show or hide the main window
 fn toggle_window<R: Runtime>(app: &tauri::AppHandle<R>) {
     if let Some(window) = app.get_webview_window("main") {
@@ -17,14 +38,12 @@ fn toggle_window<R: Runtime>(app: &tauri::AppHandle<R>) {
     }
 }
 
-/// Navigate the main window to a path and bring it to front
-fn navigate_to<R: Runtime>(app: &tauri::AppHandle<R>, path: &str) {
+/// Navigate the main window (top-level) to a URL and bring it to front.
+fn navigate_to<R: Runtime>(app: &tauri::AppHandle<R>, url: &str) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.show();
         let _ = window.set_focus();
-        // The window hosts a shell page (shell.html) with both front-ends in
-        // iframes; ask it to reveal/route the right one — no reload, instant switch.
-        let script = format!("window.__urbrainNavigate && window.__urbrainNavigate('{path}')");
+        let script = format!("window.location.href='{url}'");
         let _ = window.eval(&script);
     }
 }
@@ -38,8 +57,8 @@ fn build_tray_menu<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<Menu<
     let canvas    = MenuItem::with_id(app, "canvas",    "Workflow Canvas",   true, None::<&str>)?;
     let approvals = MenuItem::with_id(app, "approvals", "Approval Inbox",    true, None::<&str>)?;
     let sep2      = tauri::menu::PredefinedMenuItem::separator(app)?;
-    // Switch the window between the two bundled front-ends: the consumer app at
-    // "/" and the business dashboard mounted at "/dashboard/".
+    // Switch the window between the two live front-ends: the consumer app
+    // (client.urbrain.ai) and the business dashboard (business.urbrain.ai).
     let consumer  = MenuItem::with_id(app, "consumer", "Consumer App",       true, None::<&str>)?;
     let business  = MenuItem::with_id(app, "business", "Business Dashboard",  true, None::<&str>)?;
     let sep3      = tauri::menu::PredefinedMenuItem::separator(app)?;
@@ -71,6 +90,12 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_store::Builder::new().build())
+        // Inject the floating Consumer/Business switcher into every page load.
+        .on_page_load(|webview, payload| {
+            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                let _ = webview.eval(SWITCHER_JS);
+            }
+        })
         .setup(|app| {
             let handle = app.handle().clone();
 
@@ -88,16 +113,12 @@ pub fn run() {
                             let _ = window.set_focus();
                         }
                     }
-                    "dashboard" => navigate_to(app, "/"),
-                    "ops"       => navigate_to(app, "/operations"),
-                    "canvas"    => navigate_to(app, "/canvas"),
-                    "approvals" => navigate_to(app, "/autopilot/approvals"),
-                    "consumer"  => navigate_to(app, "/"),
-                    // Load the dashboard's exact index file. Tauri's asset protocol
-                    // only falls back to the ROOT index.html, so navigating to the
-                    // bare "/dashboard/" path would serve the consumer app; the
-                    // explicit file is served directly, then hash routing takes over.
-                    "business"  => navigate_to(app, "/dashboard/index.html"),
+                    "dashboard" => navigate_to(app, CONSUMER_URL),
+                    "ops"       => navigate_to(app, "https://client.urbrain.ai/operations"),
+                    "canvas"    => navigate_to(app, "https://client.urbrain.ai/canvas"),
+                    "approvals" => navigate_to(app, "https://client.urbrain.ai/autopilot/approvals"),
+                    "consumer"  => navigate_to(app, CONSUMER_URL),
+                    "business"  => navigate_to(app, BUSINESS_URL),
                     "quit"      => app.exit(0),
                     _ => {}
                 })
