@@ -3,20 +3,12 @@
 # and publishes them to this repo's Releases. The website's Download page reads
 # the latest release from here.
 #
-# Layout note: the Tauri config (src-tauri/tauri.conf.json) references the web
-# frontend as a SIBLING folder ("../urbrain-client"), via:
-#   beforeBuildCommand: "cd ../urbrain-client && npm run build"
-#   frontendDist:       "../urbrain-client/dist"
-# So CI checks out BOTH repos side-by-side under the workspace root:
-#   $GITHUB_WORKSPACE/urbrain-desktop   (this repo)
-#   $GITHUB_WORKSPACE/urbrain-client    (private frontend, needs a PAT)
+# Note: the desktop app is a thin native shell that loads the LIVE web apps
+# (client.urbrain.ai / business.urbrain.ai) top-level, so their same-site cookie
+# auth works. It does NOT bundle the front-ends — no sibling checkout, no
+# CLIENT_CHECKOUT_TOKEN. frontendDist is just a small placeholder (../frontend).
 #
-# Required secret:
-#   CLIENT_CHECKOUT_TOKEN — a fine-grained PAT with read access to
-#   projectminovative/urbrain-client (Contents: Read). Used only to check that
-#   private repo out; the release upload itself uses the built-in GITHUB_TOKEN.
-#
-# Optional secrets (code signing / auto-update — safe to leave unset for now):
+# Secrets (code signing / auto-update):
 #   APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY,
 #   APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID   (macOS notarization)
 #   TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD (updater)
@@ -61,20 +53,6 @@ jobs:
         with:
           path: urbrain-desktop
 
-      - name: Check out web frontend (private, sibling)
-        uses: actions/checkout@v4
-        with:
-          repository: projectminovative/urbrain-client
-          token: ${{ secrets.CLIENT_CHECKOUT_TOKEN }}
-          path: urbrain-client
-
-      - name: Check out business dashboard (private, sibling)
-        uses: actions/checkout@v4
-        with:
-          repository: projectminovative/urbrain-dashboard
-          token: ${{ secrets.CLIENT_CHECKOUT_TOKEN }}
-          path: urbrain-dashboard
-
       - name: Install Linux build dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -102,14 +80,6 @@ jobs:
         uses: swatinem/rust-cache@v2
         with:
           workspaces: urbrain-desktop/src-tauri -> target
-
-      - name: Install web frontend dependencies
-        working-directory: urbrain-client
-        run: npm ci || npm install
-
-      - name: Install business dashboard dependencies
-        working-directory: urbrain-dashboard
-        run: npm ci || npm install
 
       - name: Install desktop app dependencies
         working-directory: urbrain-desktop
