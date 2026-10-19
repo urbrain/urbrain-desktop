@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Shown in the macOS permission prompt when the voice assistant first
+       requests the microphone. Required for getUserMedia in WKWebView. -->
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Urbrain uses your microphone for the in-app voice assistant.</string>
+</dict>
+</plist>
