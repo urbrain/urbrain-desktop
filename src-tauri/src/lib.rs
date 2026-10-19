@@ -19,7 +19,7 @@ const SWITCHER_JS: &str = r#"(function(){try{
   var onBiz=location.hostname.indexOf('business')===0;
   var bar=document.createElement('div');
   bar.id='__urbrain_switch';
-  bar.style.cssText='position:fixed;bottom:16px;right:16px;z-index:2147483647;display:flex;gap:2px;background:rgba(17,17,24,.92);border:1px solid rgba(255,255,255,.14);border-radius:9999px;padding:3px;box-shadow:0 6px 24px rgba(0,0,0,.35);font-family:system-ui,-apple-system,sans-serif';
+  bar.style.cssText='position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:2147483647;display:flex;gap:2px;background:rgba(17,17,24,.92);border:1px solid rgba(255,255,255,.14);border-radius:9999px;padding:3px;box-shadow:0 6px 24px rgba(0,0,0,.35);font-family:system-ui,-apple-system,sans-serif';
   function mk(label,active,url){var b=document.createElement('button');b.textContent=label;b.style.cssText='appearance:none;border:0;outline:0;border-radius:9999px;padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer;color:'+(active?'#fff':'#9aa1ad')+';background:'+(active?'linear-gradient(135deg,#f97316,#a855f7)':'transparent');b.onclick=function(){if(!active)location.href=url;};return b;}
   bar.appendChild(mk('Consumer',!onBiz,'https://client.urbrain.ai/'));
   bar.appendChild(mk('Business',onBiz,'https://business.urbrain.ai/'));
